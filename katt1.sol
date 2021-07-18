@@ -95,6 +95,13 @@ contract KattToken {
         currentEra = 1; currentDay = 1;
         daysPerEra = 244; secondsPerDay = 84200;
         balances_[address(this)] = totalSupply_;
+        emit Transfer(address(0), address(this), totalSupply_);
+        // testing
+        // balances_[address(this)] -= 1000*coin;
+        // balances_[msg.sender] = 1000*coin;
+        // emit Transfer(address(this), msg.sender, 1000*coin);
+        // secondsPerDay = 1;
+        // end testing
         genesis = now;
         nextEraTime = genesis + (secondsPerDay * daysPerEra);
         nextDayTime = genesis + secondsPerDay;
@@ -112,10 +119,7 @@ contract KattToken {
     }
 
     function transfer(address receiver, uint numTokens) public returns (bool) {
-        require(numTokens <= balances_[msg.sender]);
-        balances_[msg.sender] = balances_[msg.sender].sub(numTokens);
-        balances_[receiver] = balances_[receiver].add(numTokens);
-        emit Transfer(msg.sender, receiver, numTokens);
+        _transfer(msg.sender, receiver, numTokens);
         return true;
     }
 
@@ -130,19 +134,25 @@ contract KattToken {
     }
 
     function transferFrom(address owner, address buyer, uint numTokens) public returns (bool) {
-        require(numTokens <= balances_[owner]);    
         require(numTokens <= allowances_[owner][msg.sender]);
-    
-        balances_[owner] = balances_[owner].sub(numTokens);
         allowances_[owner][msg.sender] = allowances_[owner][msg.sender].sub(numTokens);
-        balances_[buyer] = balances_[buyer].add(numTokens);
-        emit Transfer(owner, buyer, numTokens);
+
+        _transfer(owner, buyer, numTokens);
         return true;
     }
 
+    function _transfer(address _from, address _to, uint _value) private {
+        require(_value <= balances_[_from], 'Must not send more than balance');
+        require(balances_[_to] + _value >= balances_[_to], 'Balance overflow');
+        balances_[_from] = balances_[_from].sub(_value);
+        balances_[_to] = balances_[_to].add(_value);
+        emit Transfer(_from, _to, _value);
+    }
+
     //======================================LOTTERY=========================================//
-    function joinLottery() public returns(bool) {
+    function joinLottery() external returns(bool) {
         if (mapEraDayMember_LotteryShares[currentEra][currentDay][msg.sender] > 0) {
+            _updateEmission();
             return false;
         } else {
             uint _now = now;
@@ -167,11 +177,11 @@ contract KattToken {
         }
     }
 
-    function withdrawLotteryWin(uint era, uint day) external returns (uint value) {
+    function withdrawLottery(uint era, uint day) external returns (uint value) {
         value = _withdrawShare(era, day, msg.sender);                           
     }
 
-    function _withdrawShare (uint _era, uint _day, address _member) private returns (uint value) {
+    function _withdrawShare(uint _era, uint _day, address _member) private returns (uint value) {
         _updateEmission();
         if (_era < currentEra) {                                                            // Allow if in previous Era
             value = _processWithdrawal(_era, _day, _member);                                // Process Withdrawal
@@ -183,7 +193,7 @@ contract KattToken {
         return value;
     }
 
-    function _processWithdrawal (uint _era, uint _day, address _member) private returns (uint value) {
+    function _processWithdrawal(uint _era, uint _day, address _member) private returns (uint value) {
         uint memberShares = mapEraDayMember_LotteryShares[_era][_day][_member];                      // Get Member Units
         if (memberShares == 0) { 
             value = 0;                                                                      // Do nothing if 0 (prevents revert)
@@ -193,7 +203,7 @@ contract KattToken {
             mapEraDay_SharesRemaining[_era][_day] = mapEraDay_SharesRemaining[_era][_day].sub(memberShares);  // Decrement Member Units
             mapEraDay_EmissionRemaining[_era][_day] = mapEraDay_EmissionRemaining[_era][_day].sub(value);     // Decrement emission
             totalEmitted += value;                                                          // Add to Total Emitted
-            transferFrom(address(this), _member, value);                                    // ERC20 transfer function
+            _transfer(address(this), _member, value);                                    // ERC20 transfer function
             emit Withdrawal(msg.sender, _member, _era, _day, value, mapEraDay_EmissionRemaining[_era][_day]);
         }
         return value;
@@ -282,7 +292,7 @@ contract KattToken {
         bets_[_betID].gamblerInfo[msg.sender].option = _option;
         bets_[_betID].gamblerInfo[msg.sender].amount = _betAmount;
 
-        transferFrom(msg.sender, address(this), _betAmount);
+        transfer(address(this), _betAmount);
 
         emit BetPlaced(msg.sender, _betID, _option, _betAmount);
     }
@@ -299,7 +309,7 @@ contract KattToken {
 		emit betStatusUpdate(_betID, bets_[_betID].status);
 	}
 
-    function withdrawBetWin(uint256 _betID) external returns (uint value) {
+    function withdrawBet(uint256 _betID) external returns (uint value) {
         value = betWinWithdrawal(_betID, msg.sender);                           
     }
 
@@ -307,7 +317,7 @@ contract KattToken {
         value = getMemberBetWin(_betID, _member);
         if (value > 0) { 
             bets_[_betID].gamblerInfo[_member].withdrawn = true;
-            transferFrom(address(this), _member, value);
+            _transfer(address(this), _member, value);
             emit BetWithdrawal(msg.sender, _member, value, _betID);
         }
         return value;
