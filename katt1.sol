@@ -78,6 +78,10 @@ contract KattToken {
     // Betting Public Parameters
     uint public betCount;
     mapping(uint256 => Bet) public bets_;
+    mapping(address=>uint[]) public mapMember_BetsJoined;
+    mapping(address=>uint) public mapMember_BetsJoinedCount;
+    mapping(address=>uint[]) public mapMember_BetsCreated;
+    mapping(address=>uint) public mapMember_BetsCreatedCount;
 
     // Betting Events
     event betCreated(address creator, uint256 betID, string description, uint256 betDurationInHours);
@@ -150,6 +154,19 @@ contract KattToken {
     }
 
     //======================================LOTTERY=========================================//
+    function getNumDaysLotteryJoined(address _member, uint _era) external view returns(uint) {
+        return mapMemberEra_LotteryDays[_member][_era].length;
+    }
+    
+    function getDaysLotteryJoined(address _member, uint _era) external view returns(uint[] memory, uint[] memory) {
+        uint[] memory _days = mapMemberEra_LotteryDays[_member][_era];
+        uint[] memory _remainingShares = new uint[](_days.length);
+        for (uint i = 0; i < _days.length; i++) {
+            _remainingShares[i] = mapEraDayMember_LotteryShares[_era][_days[i]][_member];
+        }
+        return (mapMemberEra_LotteryDays[_member][_era], _remainingShares);
+    }
+
     function joinLottery() external returns(bool) {
         if (mapEraDayMember_LotteryShares[currentEra][currentDay][msg.sender] > 0) {
             _updateEmission();
@@ -274,6 +291,8 @@ contract KattToken {
         for (uint i = 0; i < curBet.optionCount; i++) {
             curBet.options[i] = bytes32ToStr(_options[i]);
         }
+        mapMember_BetsCreated[msg.sender].push(betCount);
+        mapMember_BetsCreatedCount[msg.sender] += 1;
         emit betCreated(msg.sender, betCount, _description, _betDurationInHours);
         return betCount;
 	}
@@ -293,6 +312,9 @@ contract KattToken {
         bets_[_betID].gamblerInfo[msg.sender].amount = _betAmount;
 
         transfer(address(this), _betAmount);
+
+        mapMember_BetsJoined[msg.sender].push(_betID);
+        mapMember_BetsJoinedCount[msg.sender] += 1;
 
         emit BetPlaced(msg.sender, _betID, _option, _betAmount);
     }
