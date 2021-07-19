@@ -154,11 +154,11 @@ contract KattToken {
     }
 
     //======================================LOTTERY=========================================//
-    function getNumDaysLotteryJoined(address _member, uint _era) external view returns(uint) {
+    function getMemberNumDaysLotteryJoined(address _member, uint _era) external view returns(uint) {
         return mapMemberEra_LotteryDays[_member][_era].length;
     }
     
-    function getDaysLotteryJoined(address _member, uint _era) external view returns(uint[] memory, uint[] memory) {
+    function getMemberDaysLotteryJoined(address _member, uint _era) external view returns(uint[] memory, uint[] memory) {
         uint[] memory _days = mapMemberEra_LotteryDays[_member][_era];
         uint[] memory _remainingShares = new uint[](_days.length);
         for (uint i = 0; i < _days.length; i++) {
@@ -167,13 +167,22 @@ contract KattToken {
         return (mapMemberEra_LotteryDays[_member][_era], _remainingShares);
     }
 
+    function getDayLotteryJoinedMembers(uint _era, uint _day) external view returns(uint, address[] memory, uint[] memory) {
+        address[] memory _members = mapEraDay_LotteryMembers[_era][_day];
+        uint[] memory _shares = new uint[](_members.length);
+        for (uint i = 0; i < _members.length; i++) {
+            _shares[i] = mapEraDayMember_LotteryShares[_era][_day][_members[i]];
+        }
+        return (mapEraDay_LotteryTotalShares[_era][_day], _members, _shares);
+    }
+
     function joinLottery() external returns(bool) {
         if (mapEraDayMember_LotteryShares[currentEra][currentDay][msg.sender] > 0) {
             _updateEmission();
             return false;
         } else {
-            uint _now = now;
-            uint randomShareAmount = (_now%10) + 1;
+            uint256 blockNumber = block.number;
+            uint256 randomShareAmount = ((blockNumber+uint256(msg.sender)+mapEraDay_LotteryTotalShares[currentEra][currentDay])%10) + 1;
             mapEraDayMember_LotteryShares[currentEra][currentDay][msg.sender] = randomShareAmount;
             mapEraDay_LotteryTotalShares[currentEra][currentDay] += randomShareAmount;
             mapEraDay_SharesRemaining[currentEra][currentDay] += randomShareAmount;
